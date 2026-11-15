@@ -1,0 +1,8 @@
+{
+  "name": "handsfree",
+  "version": "0.1.0",
+  "description": "Hands-free voice for Claude Code: talk to it, hear it answer, interrupt it.",
+  "author": { "name": "thewh1teagle" },
+  "license": "MIT",
+  "repository": "https://github.com/thewh1teagle/handsfree"
+}

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 200" width="256" height="200" role="img" aria-label="Hands Free" shape-rendering="crispEdges">
+  <!-- a blocky little creature with one big ear, listening. No hands. -->
+  <g fill="#C4633F">
+    <rect x="64" y="136" width="24" height="24"/>
+    <rect x="112" y="136" width="24" height="24"/>
+    <rect x="40" y="76" width="12" height="24"/>
+  </g>
+  <rect x="52" y="40" width="96" height="96" fill="#D97757"/>
+  <!-- the ear -->
+  <rect x="148" y="64" width="12" height="48" fill="#D97757"/>
+  <rect x="160" y="76" width="12" height="24" fill="#D97757"/>
+  <rect x="148" y="76" width="12" height="24" fill="#C4633F"/>
+  <!-- face -->
+  <rect x="76" y="68" width="12" height="18" fill="#3D2A22"/>
+  <rect x="112" y="68" width="12" height="18" fill="#3D2A22"/>
+  <rect x="64" y="96" width="12" height="8" fill="#F0A58A"/>
+  <rect x="124" y="96" width="12" height="8" fill="#F0A58A"/>
+  <g fill="#3D2A22">
+    <rect x="88" y="98" width="6" height="6"/>
+    <rect x="94" y="104" width="12" height="6"/>
+    <rect x="106" y="98" width="6" height="6"/>
+  </g>
+  <!-- sound arriving -->
+  <g fill="#D97757">
+    <rect x="192" y="82" width="8" height="36"/>
+    <rect x="200" y="74" width="8" height="8"/>
+    <rect x="200" y="118" width="8" height="8"/>
+    <g opacity="0.55">
+      <rect x="212" y="70" width="8" height="60"/>
+      <rect x="220" y="62" width="8" height="8"/>
+      <rect x="220" y="130" width="8" height="8"/>
+    </g>
+    <g opacity="0.28">
+      <rect x="232" y="58" width="8" height="84"/>
+      <rect x="240" y="50" width="8" height="8"/>
+      <rect x="240" y="142" width="8" height="8"/>
+    </g>
+  </g>
+</svg>

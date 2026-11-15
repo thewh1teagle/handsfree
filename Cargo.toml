@@ -1,0 +1,36 @@
+[package]
+name = "handsfree"
+version = "0.1.0"
+edition = "2024"
+description = "Hands-free voice for Claude Code: speak, listen, interrupt."
+license = "MIT"
+repository = "https://github.com/thewh1teagle/handsfree"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+cpal = "0.18"
+ptts = { version = "0.7.1", features = ["hf", "hub"] }
+serde_json = "1"
+sherpa-onnx = "2.0.1"
+ureq = "2"
+
+# macOS: speech on the GPU, and the system's voice processing (echo cancellation) for the microphone
+[target.'cfg(target_os = "macos")'.dependencies]
+ptts = { version = "0.7.1", features = ["hf", "hub", "metal"] }
+block2 = "0.6"
+objc2 = "0.6"
+objc2-avf-audio = { version = "0.3", features = [
+    "AVAudioBuffer",
+    "AVAudioEngine",
+    "AVAudioFormat",
+    "AVAudioIONode",
+    "AVAudioNode",
+    "AVAudioTime",
+    "AVAudioTypes",
+    "block2",
+] }
+
+[profile.release]
+lto = "thin"
+strip = true
