@@ -60,6 +60,7 @@ No key to hold and no screen to watch. A soft chime tells you when it starts and
 | `/handsfree quiet` | answers silent, still listening |
 | `/handsfree voices` | list the voices; `/handsfree voice Harper` picks one |
 | `/handsfree always on` | start every new session with voice on |
+| `/handsfree update` | get the newest version, then restart Claude Code |
 | `/handsfree uninstall` | delete everything it downloaded |
 
 Voice is off until you ask for it.

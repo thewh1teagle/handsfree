@@ -11,7 +11,7 @@ const REPO = 'thewh1teagle/handsfree'
 let binary: string | undefined
 
 // The binary this plugin was written against: release v<VERSION> of the repository.
-const VERSION = '0.1.3'
+const VERSION = '0.1.5'
 
 /** Where the binary is, downloading this plugin's release of it when it is missing or older. */
 const locate = async ($: EngineInterface): Promise<string> => {
@@ -436,18 +436,18 @@ const command = async ($: EngineInterface, args: string): Promise<{ text: string
   }
 
   if (arg === 'update') {
-    // the two steps a person would type, then a reload: nothing else to do
+    // the two steps a person would type, in one
     const id = 'handsfree@handsfree'
     const listed = await $.process.run(['claude', 'plugin', 'marketplace', 'update', 'handsfree'], { timeoutMs: 120_000 })
     if (listed.exitCode !== 0) throw new Error(`could not check for updates: ${(listed.stderr || listed.stdout).trim().slice(-300)}`)
     const updated = await $.process.run(['claude', 'plugin', 'update', id], { timeoutMs: 120_000 })
     if (updated.exitCode !== 0) throw new Error(`could not update: ${(updated.stderr || updated.stdout).trim().slice(-300)}`)
-    await set($, false, false)
     await $.store.set('latest', '')
-    // not awaited: the reload unloads this very module
-    void $.command.run({ command: 'reload-plugins' }).catch(() => undefined)
+    const line = updated.stdout.trim().split('\n').at(-1) ?? 'Updated.'
+    // Claude Code loads a new plugin version only when it starts: a reload keeps the old one
+    const isNew = !/already/i.test(line)
 
-    return say1(`${updated.stdout.trim().split('\n').at(-1) ?? 'Updated.'}\nReloading. Type /handsfree to carry on.`)
+    return say1(isNew ? `${line.replace(/\s*Restart to apply changes\.?/i, '')}\nRestart Claude Code to finish.` : line)
   }
   if (arg === 'uninstall') {
     await set($, false, false)
