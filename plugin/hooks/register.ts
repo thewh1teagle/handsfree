@@ -149,12 +149,20 @@ const plain = (text: string): string => {
   return out.trim().slice(0, 240)
 }
 
+// When an answer is taking a while and nothing has been said yet, a few words so the wait
+// is not silence. Once per turn, THINK_MS in, and never over the person or other speech.
+const THINK_MS = 4000
+const FILLERS = ['Thinking about it.', 'Let me think.', 'One moment.', 'Working on it.', 'Let me look into that.']
+let thinking: { cancel: () => void } | undefined
+let filler = 0
+
 const progress = async ($: EngineInterface, text: string): Promise<void> => {
   const line = plain(text)
   if (line.length < 8 || stop !== undefined || personHasTheFloor()) return
   const now = await $.clock.now()
   if (now - quietSince < GAP_MS) return
   if (!speaking) return
+  thinking?.cancel() // something real is about to be said
   quietSince = now
   await say($, line)
 }
@@ -569,6 +577,13 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       running = e.turnId
       quietSince = (await $.clock.now()) - GAP_MS + FIRST_MS
+      thinking?.cancel()
+      const turnId = e.turnId
+      thinking = $.clock.after(THINK_MS, () => {
+        const isQuiet = stop === undefined && !personHasTheFloor() && !paused
+        if (running !== turnId || !speaking || !isQuiet) return
+        void say($, FILLERS[filler++ % FILLERS.length] ?? 'One moment.').catch(() => undefined)
+      })
     }
 
     return next(e)
@@ -594,7 +609,10 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId === undefined && running === e.turnId) running = undefined
+    if (e.agentId === undefined && running === e.turnId) {
+      running = undefined
+      thinking?.cancel()
+    }
     const isMainAnswer = e.agentId === undefined && e.reason === 'answer'
     if (!isMainAnswer || e.answer.trim() === '') return done
     if (!speaking) return done
