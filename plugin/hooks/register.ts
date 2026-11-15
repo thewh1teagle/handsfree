@@ -376,7 +376,7 @@ const WELCOME =
   'To have me in every session, type slash hands free always on.'
 
 const HELP =
-  '/handsfree on or off · mute (microphone off) · quiet (speech off) · voices · voice <name> · always on|off · uninstall'
+  '/handsfree on or off · mute (microphone off) · quiet (speech off) · voices · voice <name> · always on|off · update · uninstall'
 
 /** What `/handsfree <args>` does; throws with the reason when it cannot. */
 const command = async ($: EngineInterface, args: string): Promise<{ text: string; isTextDisplayOnly: true }> => {
@@ -435,6 +435,20 @@ const command = async ($: EngineInterface, args: string): Promise<{ text: string
     return say1(isDefault ? 'Voice reset to the default.' : `Voice: ${name}.`)
   }
 
+  if (arg === 'update') {
+    // the two steps a person would type, then a reload: nothing else to do
+    const id = 'handsfree@handsfree'
+    const listed = await $.process.run(['claude', 'plugin', 'marketplace', 'update', 'handsfree'], { timeoutMs: 120_000 })
+    if (listed.exitCode !== 0) throw new Error(`could not check for updates: ${(listed.stderr || listed.stdout).trim().slice(-300)}`)
+    const updated = await $.process.run(['claude', 'plugin', 'update', id], { timeoutMs: 120_000 })
+    if (updated.exitCode !== 0) throw new Error(`could not update: ${(updated.stderr || updated.stdout).trim().slice(-300)}`)
+    await set($, false, false)
+    await $.store.set('latest', '')
+    // not awaited: the reload unloads this very module
+    void $.command.run({ command: 'reload-plugins' }).catch(() => undefined)
+
+    return say1(`${updated.stdout.trim().split('\n').at(-1) ?? 'Updated.'}\nReloading. Type /handsfree to carry on.`)
+  }
   if (arg === 'uninstall') {
     await set($, false, false)
     // the binary removes its own folder (itself, the models, the settings) and the voices
@@ -454,7 +468,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'handsfree',
-      description: 'Voice on or off for this session. Also: mute, quiet, voices, voice <name>, always on|off, uninstall',
+      description: 'Voice on or off for this session. Also: mute, quiet, voices, voice <name>, always on|off, update, uninstall',
     })
     // The model's own handle on voice: it understands "give me a minute, I'm talking to
     // someone" however it was said or misheard, and calls this instead of answering.
@@ -483,6 +497,23 @@ export const register: Register = on => {
       await $.store.set('hinted', true)
       $.ui.log('handsfree is installed. Type /handsfree to talk to Claude.')
     }
+    // once a day, quietly: is there a newer release than the one this plugin was written for?
+    void (async () => {
+      const now = await $.clock.now()
+      const last = await $.store.get('checked')
+      if (typeof last !== 'number' || now - last > 86_400_000) {
+        await $.store.set('checked', now)
+        const reply = await $.http.fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+        const tag = reply.ok ? (JSON.parse(reply.text) as { tag_name?: string }).tag_name : undefined
+        await $.store.set('latest', typeof tag === 'string' ? tag.replace(/^v/, '') : '')
+      }
+      const latest = await $.store.get('latest')
+      const newer = (a: string, b: string): boolean =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }) > 0
+      if (typeof latest === 'string' && latest !== '' && newer(latest, VERSION)) {
+        $.ui.log(`handsfree ${latest} is available. Type /handsfree update.`)
+      }
+    })().catch(() => undefined)
     // off in every new session, unless the person asked for it always
     if ((await $.store.get('always')) === true) {
       void set($, true, true, true).catch(error => $.ui.log(`handsfree: ${String(error)}`))
