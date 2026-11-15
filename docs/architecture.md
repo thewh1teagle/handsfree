@@ -26,6 +26,7 @@ Claude Code plugin that decides what is said and what is done with what was hear
 | `quiet` | it was only a noise |
 | `download` | a model file is downloading (`file`, `percent`) |
 | `taken` | another session started its own; this one exits |
+| `busy` | started with `--polite` while another was running; it exits without taking over |
 
 The other commands are small clients that talk to it over a loopback socket:
 

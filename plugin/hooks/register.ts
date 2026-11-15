@@ -11,7 +11,7 @@ const REPO = 'thewh1teagle/handsfree'
 let binary: string | undefined
 
 // The binary this plugin was written against: release v<VERSION> of the repository.
-const VERSION = '0.1.1'
+const VERSION = '0.1.2'
 
 /** Where the binary is, downloading this plugin's release of it when it is missing or older. */
 const locate = async ($: EngineInterface): Promise<string> => {
@@ -243,10 +243,12 @@ const heard = async ($: EngineInterface, text: string): Promise<void> => {
 let quit: (() => void) | undefined
 
 /** Starts `handsfree run` once per session and follows its events. */
-const engine = async ($: EngineInterface): Promise<void> => {
+const engine = async ($: EngineInterface, polite = false): Promise<void> => {
   if (quit !== undefined) return
   const path = await locate($)
-  const child = $.process.spawn({ argv: [path, 'run', ...(listening ? ['--listen'] : [])] })
+  // polite: a session that turned voice on by itself ("always on") never takes it from another
+  const flags = [...(listening ? ['--listen'] : []), ...(polite ? ['--polite'] : [])]
+  const child = $.process.spawn({ argv: [path, 'run', ...flags] })
   const mine = (): void => {
     void child.return({ code: null, signal: 'SIGTERM' })
   }
@@ -268,7 +270,11 @@ const engine = async ($: EngineInterface): Promise<void> => {
         else if (e.event === 'heard' && e.text !== undefined) await heard($, e.text)
         else if (e.event === 'download') $.ui.status(e.percent === 100 ? undefined : `handsfree: downloading ${e.file} ${e.percent}%`)
         else if (e.event === 'error') $.ui.log(`handsfree: ${e.message}`)
-        else if (e.event === 'taken') {
+        else if (e.event === 'busy') {
+          speaking = false
+          listening = false
+          $.ui.log('handsfree: voice is on in another session. /handsfree brings it here.')
+        } else if (e.event === 'taken') {
           // another session turned voice on: there is one microphone and one speaker
           speaking = false
           listening = false
@@ -289,7 +295,7 @@ const engine = async ($: EngineInterface): Promise<void> => {
 // ───────────────────────── hooks ─────────────────────────
 
 /** Turns the two halves of voice on or off for this session. */
-const set = async ($: EngineInterface, speak: boolean, listen: boolean): Promise<void> => {
+const set = async ($: EngineInterface, speak: boolean, listen: boolean, polite = false): Promise<void> => {
   speaking = speak
   listening = listen
   if (!speak) hush()
@@ -305,8 +311,10 @@ const set = async ($: EngineInterface, speak: boolean, listen: boolean): Promise
 
     return
   }
-  await engine($)
-  await $.process.run([await locate($), 'listen', listen ? 'on' : 'off'])
+  await engine($, polite)
+  // started politely, the engine listens from its flag; a listen command would reach the
+  // other session's engine instead
+  if (!polite) await $.process.run([await locate($), 'listen', listen ? 'on' : 'off'])
 }
 
 // Said once, the first time voice is ever turned on: what to do, in three breaths.
@@ -403,7 +411,7 @@ export const register: Register = on => {
     }
     // off in every new session, unless the person asked for it always
     if ((await $.store.get('always')) === true) {
-      void set($, true, true).catch(error => $.ui.log(`handsfree: ${String(error)}`))
+      void set($, true, true, true).catch(error => $.ui.log(`handsfree: ${String(error)}`))
     }
 
     return next(e)

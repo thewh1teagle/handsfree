@@ -39,6 +39,9 @@ enum Command {
         /// Start listening at once.
         #[arg(long)]
         listen: bool,
+        /// Leave a running handsfree alone instead of taking over from it: report `busy` and exit.
+        #[arg(long)]
+        polite: bool,
         /// Seconds of quiet that end what you are saying. Default: 1.5.
         #[arg(long)]
         silence: Option<f32>,
@@ -154,13 +157,17 @@ fn main() -> Result<()> {
         Command::Stop => ask(json!({ "stop": true }), Duration::ZERO),
         Command::Uninstall => uninstall(),
         Command::Listen { state } => ask(json!({ "listen": state == "on" }), WAIT),
-        Command::Run { model, voice, listen, silence, no_chimes } => {
+        Command::Run { model, voice, listen, polite, silence, no_chimes } => {
             // flags, then ~/.cache/handsfree/config.json, then the defaults
             let config: Value = std::fs::read_to_string(models::home().join("config.json"))
                 .ok()
                 .and_then(|text| serde_json::from_str(&text).ok())
                 .unwrap_or(Value::Null);
             let text = |key: &str| config[key].as_str().map(str::to_string);
+            if polite && ask(json!({ "ping": true }), Duration::ZERO).is_ok() {
+                event(json!({ "event": "busy" })); // another session has the voice: do not take it
+                return Ok(());
+            }
             run(
                 model.or(text("model")).unwrap_or_else(|| ptts::checkpoint::DEFAULT_MODEL.to_string()),
                 Some(voice.or(text("voice")).unwrap_or_else(|| DEFAULT_VOICE.to_string())),
