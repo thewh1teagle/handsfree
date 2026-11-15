@@ -456,6 +456,28 @@ export const register: Register = on => {
       name: 'handsfree',
       description: 'Voice on or off for this session. Also: mute, quiet, voices, voice <name>, always on|off, uninstall',
     })
+    // The model's own handle on voice: it understands "give me a minute, I'm talking to
+    // someone" however it was said or misheard, and calls this instead of answering.
+    await $.tool.register({
+      name: 'voice',
+      isDeferred: false,
+      description:
+        'Controls the Hands Free voice plugin, through which the user may be speaking to you aloud. Call it when ' +
+        'the user asks you to stop listening, pause, wait while they talk to someone else, mute the microphone, ' +
+        'stop speaking aloud, turn voice off, or change your voice. Their words reach you through speech ' +
+        'recognition, which often garbles such requests (for example "it is stop listening club" for "stop ' +
+        'listening, Claude"): when a short message plausibly means one of these, call this tool instead of ' +
+        'answering. Actions: "pause" stops acting on what is heard until the user says "hands free"; "mute" turns ' +
+        'the microphone off; "quiet" stops spoken answers; "off" turns voice off; "voice" changes the voice to `name`.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['pause', 'mute', 'quiet', 'off', 'voice'] },
+          name: { type: 'string', description: 'For "voice": the voice to use, e.g. Harper.' },
+        },
+        required: ['action'],
+      },
+    })
     // once, right after installing: the one thing to know
     if ((await $.store.get('hinted')) !== true) {
       await $.store.set('hinted', true)
@@ -483,6 +505,23 @@ export const register: Register = on => {
       }
     }
   }).catch(() => ({ text: `The command failed. ${HELP}`, isTextDisplayOnly: true as const }))
+
+  on('tool.call', { tool: 'mcp__handsfree__voice' }, async ($, e) => {
+    const input = e as unknown as { action?: string; name?: string }
+    if (!speaking && !listening) return { result: 'Voice is off in this session; nothing to change.' }
+    if (input.action === 'pause') {
+      await pause($, true)
+
+      return { result: 'Paused. Nothing heard is acted on until the user says "hands free". Do not reply further.' }
+    }
+    if (input.action === 'mute') await set($, true, false)
+    else if (input.action === 'quiet') await set($, false, true)
+    else if (input.action === 'off') await set($, false, false)
+    else if (input.action === 'voice' && typeof input.name === 'string') await $.store.set('voice', input.name)
+    else return { result: 'Unknown action.', isError: true as const }
+
+    return { result: `Done: ${input.action}${input.action === 'voice' ? ` ${input.name}` : ''}.` }
+  }).catch(() => ({ result: 'The voice control failed.', isError: true as const }))
 
   // A new prompt cuts off whatever is still being said.
   on('prompt.submit', ($, e, next) => {
