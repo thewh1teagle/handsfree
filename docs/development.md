@@ -46,6 +46,15 @@ claude plugin validate plugin
 
 ## Releases
 
-Pushing a tag `v*` builds the binaries and attaches them to a GitHub release
-(`.github/workflows/release.yml`). The plugin downloads `handsfree-<arch>-<os>.tar.gz`
-from the latest release.
+Releases are made by hand, from a machine of the platform being released:
+
+```sh
+scripts/release.sh
+```
+
+It checks that `Cargo.toml`, `plugin/.claude-plugin/plugin.json` and `VERSION` in
+`plugin/hooks/register.ts` agree and that `main` is pushed, builds the binary, and attaches
+`handsfree-<target>.tar.gz` to release `v<version>`. Run it again on another platform to add
+that platform's binary to the same release.
+
+The plugin downloads the release that matches its own version, so bump all three together.
