@@ -11,7 +11,7 @@ const REPO = 'thewh1teagle/handsfree'
 let binary: string | undefined
 
 // The binary this plugin was written against: release v<VERSION> of the repository.
-const VERSION = '0.1.2'
+const VERSION = '0.1.3'
 
 /** Where the binary is, downloading this plugin's release of it when it is missing or older. */
 const locate = async ($: EngineInterface): Promise<string> => {
@@ -178,7 +178,20 @@ const INTERRUPTED =
 
 // "Stop", said alone, is a command to the session and is never sent to the model.
 const STOP =
-  /^((ok(ay)?|alright|all right|please|hey|no)[, ]+)*(stop|cancel|abort|halt|enough|never ?mind|quiet|be quiet|shut up|you can stop|that's enough|that is enough)(( it| that| now| please| there| talking| everything))*[.!]*$/i
+  /^((ok(ay)?|alright|all right|please|hey|no|claude|claud|cloud|clawed|clod)[, ]+)*(stop|cancel|abort|halt|enough|never ?mind|quiet|be quiet|shut up|you can stop|that's enough|that is enough)(( it| that| now| please| there| talking| everything))*[.!]*$/i
+
+// "Stop listening" pauses: what is heard is dropped here, on this machine, before any model
+// sees it, until the words that end the pause. For when you turn to talk to someone else.
+const NAME = '(claude|claud|cloud|clawed|clod)'
+const LEAD = '((ok|okay|alright|hey|please|so) )*'
+const PAUSE = new RegExp(`^${LEAD}((${NAME} )?(stop|pause) listening|hands ?free (stop|pause|off|mute)|${NAME} (pause|mute))$`)
+const RESUME = new RegExp(
+  `^${LEAD}(hands ?free( (on|resume|start|listen|back))?|(${NAME} )?(start|resume) listening|${NAME} listen( again)?|(i am|im) back|listen again)$`,
+)
+/** The words alone: lower case, no punctuation. */
+const bare = (text: string): string =>
+  text.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+let paused = false
 
 // How a small model sorts what was just heard.
 const DONE = 'something to answer or act on now, even if short or casual'
@@ -209,8 +222,29 @@ const send = ($: EngineInterface, text: string): void => {
   })
 }
 
+const pause = async ($: EngineInterface, on: boolean): Promise<void> => {
+  paused = on
+  talking = false
+  waiting?.cancel()
+  held = ''
+  await $.process.run([await locate($), 'listen', on ? 'pause' : 'resume']).catch(() => undefined)
+  $.ui.status(on ? 'voice: paused. Say "hands free" to carry on.' : undefined)
+  void say($, on ? 'Okay, I am not listening.' : 'I am listening.').catch(() => undefined)
+}
+
 const heard = async ($: EngineInterface, text: string): Promise<void> => {
   talking = false
+  const words = bare(text)
+  if (paused) {
+    if (RESUME.test(words)) await pause($, false)
+
+    return // nothing else that was heard goes anywhere
+  }
+  if (PAUSE.test(words)) {
+    await pause($, true)
+
+    return
+  }
   if (STOP.test(text)) {
     const turnId = running
     hush()
@@ -299,7 +333,8 @@ const set = async ($: EngineInterface, speak: boolean, listen: boolean, polite =
   speaking = speak
   listening = listen
   if (!speak) hush()
-  if (!listen) {
+  if (!listen || paused) {
+    paused = false
     waiting?.cancel()
     held = ''
     talking = false

@@ -66,6 +66,12 @@ Voice is off until you ask for it.
 
 <br>
 
+## Talking to someone else
+
+Say **"stop listening"** and it stays out of the conversation: nothing it hears is acted on or leaves your machine. Say **"hands free"** when you are back.
+
+<br>
+
 ## More than one session
 
 There is one microphone, so voice lives in one session at a time.

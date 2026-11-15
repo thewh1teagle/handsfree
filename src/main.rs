@@ -63,7 +63,8 @@ enum Command {
     Uninstall,
     /// Turn the microphone on or off.
     Listen {
-        #[arg(value_parser = ["on", "off"])]
+        /// `pause` keeps hearing but stays out of the way (no chimes, speech not cut off); `resume` ends it.
+        #[arg(value_parser = ["on", "off", "pause", "resume"])]
         state: String,
     },
 }
@@ -156,7 +157,11 @@ fn main() -> Result<()> {
         }
         Command::Stop => ask(json!({ "stop": true }), Duration::ZERO),
         Command::Uninstall => uninstall(),
-        Command::Listen { state } => ask(json!({ "listen": state == "on" }), WAIT),
+        Command::Listen { state } => match state.as_str() {
+            "pause" => ask(json!({ "paused": true }), WAIT),
+            "resume" => ask(json!({ "paused": false }), WAIT),
+            _ => ask(json!({ "listen": state == "on" }), WAIT),
+        },
         Command::Run { model, voice, listen, polite, silence, no_chimes } => {
             // flags, then ~/.cache/handsfree/config.json, then the defaults
             let config: Value = std::fs::read_to_string(models::home().join("config.json"))
@@ -193,7 +198,8 @@ fn run(model: String, default_voice: Option<String>, listen: bool, silence: f32,
     let voice = voice::Voice::start(model, default_voice, speaker.clone(), ready);
 
     let listening = Arc::new(AtomicBool::new(listen));
-    let ears = ears::Ears { on: listening.clone(), silence, chimes };
+    let paused = Arc::new(AtomicBool::new(false));
+    let ears = ears::Ears { on: listening.clone(), paused: paused.clone(), silence, chimes };
     let (ears_voice, ears_speaker) = (voice.clone(), speaker.clone());
     std::thread::spawn(move || {
         if let Err(error) = ears.run(ears_voice, ears_speaker) {
@@ -208,15 +214,20 @@ fn run(model: String, default_voice: Option<String>, listen: bool, silence: f32,
 
     for connection in listener.incoming() {
         let Ok(connection) = connection else { continue };
-        let (voice, listening) = (voice.clone(), listening.clone());
+        let (voice, listening, paused) = (voice.clone(), listening.clone(), paused.clone());
         std::thread::spawn(move || {
-            let _ = serve(connection, voice, listening);
+            let _ = serve(connection, voice, listening, paused);
         });
     }
     Ok(())
 }
 
-fn serve(mut connection: TcpStream, voice: voice::Voice, listening: Arc<AtomicBool>) -> Result<()> {
+fn serve(
+    mut connection: TcpStream,
+    voice: voice::Voice,
+    listening: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
+) -> Result<()> {
     let mut line = String::new();
     BufReader::new(connection.try_clone()?).read_line(&mut line)?;
     let request: Value = serde_json::from_str(&line)?;
@@ -227,6 +238,9 @@ fn serve(mut connection: TcpStream, voice: voice::Voice, listening: Arc<AtomicBo
         std::process::exit(0);
     } else if let Some(on) = request["listen"].as_bool() {
         listening.store(on, Ordering::SeqCst);
+        paused.store(false, Ordering::SeqCst);
+    } else if let Some(on) = request["paused"].as_bool() {
+        paused.store(on, Ordering::SeqCst);
     } else if request["stop"].as_bool() == Some(true) {
         voice.hush();
     } else if let Some(text) = request["say"].as_str() {

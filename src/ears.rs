@@ -25,6 +25,9 @@ const BLOCK: usize = 512; // one Silero window, 32 ms
 
 pub struct Ears {
     pub on: Arc<AtomicBool>,
+    /// Still hearing (for the words that end the pause), but out of the way: no chimes, and
+    /// speech is not cut off when someone talks.
+    pub paused: Arc<AtomicBool>,
     pub silence: f32,
     pub chimes: bool,
 }
@@ -114,13 +117,16 @@ impl Ears {
                         }
                         utterance = Some(preroll.drain(..).flatten().collect());
                         (heard, chimed) = (0, false);
-                        voice.hush(); // they are talking: stop talking
-                        event(json!({ "event": "speech" }));
+                        if !self.paused.load(Ordering::SeqCst) {
+                            voice.hush(); // they are talking: stop talking
+                            event(json!({ "event": "speech" }));
+                        }
                     }
                     utterance.as_mut().unwrap().extend_from_slice(&block);
                     if speaking {
                         heard += 1;
-                        if heard == (0.3 * RATE as f32) as usize / BLOCK && self.chimes {
+                        let chime = self.chimes && !self.paused.load(Ordering::SeqCst);
+                        if heard == (0.3 * RATE as f32) as usize / BLOCK && chime {
                             chimed = true; // not for a cough: only once speech has gone on 0.3 s
                             speaker.chime(&chimes.start, CHIME_RATE);
                         }
