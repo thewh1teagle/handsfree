@@ -10,31 +10,39 @@ const REPO = 'thewh1teagle/handsfree'
 
 let binary: string | undefined
 
-/** Where the binary is, downloading the release build for this machine the first time. */
+// The binary this plugin was written against: release v<VERSION> of the repository.
+const VERSION = '0.1.1'
+
+/** Where the binary is, downloading this plugin's release of it when it is missing or older. */
 const locate = async ($: EngineInterface): Promise<string> => {
   if (binary !== undefined) return binary
   const named = await $.env.get('HANDSFREE_BIN')
+  if (named !== undefined) return (binary = named)
   const home = (await $.env.get('HOME')) ?? ''
   const dir = `${home}/.cache/handsfree/bin`
-  const path = named ?? `${dir}/handsfree`
-  if (named === undefined && !(await $.fs.exists(path))) {
+  const path = `${dir}/handsfree`
+  const has = (await $.fs.exists(path))
+    ? (await $.process.run([path, '--version']).catch(() => ({ stdout: '' }))).stdout.trim()
+    : ''
+  if (has !== `handsfree ${VERSION}`) {
     const { stdout } = await $.process.run(['uname', '-sm'])
     const [system, machine] = stdout.trim().split(' ')
     const os = system === 'Darwin' ? 'apple-darwin' : 'unknown-linux-gnu'
     const arch = machine === 'arm64' || machine === 'aarch64' ? 'aarch64' : 'x86_64'
     const archive = `handsfree-${arch}-${os}.tar.gz`
-    $.ui.status('handsfree: downloading the voice engine')
+    $.ui.status(`handsfree: ${has === '' ? 'downloading' : 'updating'} the voice engine`)
     await $.process.run(['mkdir', '-p', dir])
     const got = await $.process.run(
-      ['curl', '-fsSL', '-o', `${dir}/${archive}`, `https://github.com/${REPO}/releases/latest/download/${archive}`],
+      ['curl', '-fsSL', '-o', `${dir}/${archive}`, `https://github.com/${REPO}/releases/download/v${VERSION}/${archive}`],
       { timeoutMs: 300_000 },
     )
-    if (got.exitCode !== 0) {
-      $.ui.status(undefined)
-      throw new Error(`could not download ${archive}: ${got.stderr.trim().slice(-200)}`)
-    }
-    await $.process.run(['tar', '-xzf', `${dir}/${archive}`, '-C', dir])
     $.ui.status(undefined)
+    if (got.exitCode !== 0) {
+      // an older engine that is there still works: keep it rather than have no voice
+      if (has === '') throw new Error(`could not download ${archive} (v${VERSION}): ${got.stderr.trim().slice(-200)}`)
+    } else {
+      await $.process.run(['tar', '-xzf', `${dir}/${archive}`, '-C', dir])
+    }
   }
   binary = path
 
