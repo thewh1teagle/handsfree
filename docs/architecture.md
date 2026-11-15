@@ -64,6 +64,10 @@ Models are downloaded on first use into `~/.cache/handsfree`. Settings can be pu
   with a note telling the model it was interrupted. "Stop" on its own ends the turn and is
   not sent.
 - **Never over you.** Nothing is said while you are speaking or mid-thought.
+- **Pausing.** "Stop listening" pauses: what is heard is dropped before any model sees it,
+  until a short phrase containing "hands free". Exact phrases are matched locally; anything
+  else ("give me a minute") is understood by the session's model, which has a `voice` tool
+  for pausing, muting, silencing answers and changing the voice.
 - **One session at a time.** Voice is off in every new session until `/handsfree`. Turning it
   on starts the binary; a binary started later tells the earlier one to quit (`taken`), so
   the microphone and speaker follow the session you last asked in.

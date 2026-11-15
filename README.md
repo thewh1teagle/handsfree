@@ -68,7 +68,9 @@ Voice is off until you ask for it.
 
 ## Talking to someone else
 
-Say **"stop listening"** and it stays out of the conversation: nothing it hears is acted on or leaves your machine. Say **"hands free"** when you are back.
+Say **"stop listening"**, or just "hold on, I'm talking to someone". It stays out of the conversation: nothing it hears is acted on or leaves your machine. Say **"hands free"** when you are back.
+
+You can ask for the rest in your own words too: "mute yourself", "stop reading everything out loud", "try a different voice".
 
 <br>
 
