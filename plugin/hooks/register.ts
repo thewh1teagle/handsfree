@@ -191,6 +191,11 @@ const RESUME = new RegExp(
 /** The words alone: lower case, no punctuation. */
 const bare = (text: string): string =>
   text.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+// Recognition rarely hears the name right ("it's stop listening club"), so a short sentence
+// with "stop listening" in it is enough, unless it goes on to say what to stop listening to.
+const AWAY = /\b(stop|pause|quit) listening\b(?! (to|for)\b)/
+const pauses = (words: string): boolean => PAUSE.test(words) || (AWAY.test(words) && words.split(' ').length <= 6)
+
 // While paused only this machine reads what is heard, so the way back is forgiving: a short
 // phrase with "hands free" in it, however recognition spelled it.
 const BACK = /\b(hands? ?free|hands ?three|handsfree)\b/
@@ -245,7 +250,7 @@ const heard = async ($: EngineInterface, text: string): Promise<void> => {
 
     return // nothing else that was heard goes anywhere
   }
-  if (PAUSE.test(words)) {
+  if (pauses(words)) {
     await pause($, true)
 
     return
