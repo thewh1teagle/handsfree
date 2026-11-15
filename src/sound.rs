@@ -91,6 +91,8 @@ fn resample(samples: &[f32], from: u32, to: u32) -> Vec<f32> {
 pub struct Chimes {
     pub start: Vec<f32>,
     pub end: Vec<f32>,
+    /// A soft double pulse, repeated while an answer is being thought about.
+    pub thinking: Vec<f32>,
 }
 
 pub const CHIME_RATE: u32 = 48_000;
@@ -98,7 +100,9 @@ pub const CHIME_RATE: u32 = 48_000;
 impl Chimes {
     pub fn new(volume: f32) -> Chimes {
         let (low, high) = (587.33, 880.0); // D5 and A5, a fifth apart
-        Chimes { start: pair(low, high, volume), end: pair(high, low, volume) }
+        // lower and much quieter than the chimes: it is there to be half-noticed
+        let thinking = pair(329.63, 392.0, volume * 0.4); // E4 and G4
+        Chimes { start: pair(low, high, volume), end: pair(high, low, volume), thinking }
     }
 }
 

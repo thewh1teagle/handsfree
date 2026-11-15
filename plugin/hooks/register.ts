@@ -11,7 +11,7 @@ const REPO = 'thewh1teagle/handsfree'
 let binary: string | undefined
 
 // The binary this plugin was written against: release v<VERSION> of the repository.
-const VERSION = '0.1.5'
+const VERSION = '0.1.6'
 
 /** Where the binary is, downloading this plugin's release of it when it is missing or older. */
 const locate = async ($: EngineInterface): Promise<string> => {
@@ -169,12 +169,17 @@ const plain = (text: string): string => {
   return out.trim().slice(0, 240)
 }
 
-// When an answer is taking a while and nothing has been said yet, a few words so the wait
-// is not silence. Once per turn, THINK_MS in, and never over the person or other speech.
+// When an answer is taking a while and nothing has been said yet, a soft repeating sound, so
+// the wait is not silence. It starts THINK_MS into a turn and the engine ends it when speech
+// starts; it is turned off here when the turn ends with nothing to say, or the person speaks.
 const THINK_MS = 4000
-const FILLERS = ['Thinking about it.', 'Let me think.', 'One moment.', 'Working on it.', 'Let me look into that.']
 let thinking: { cancel: () => void } | undefined
-let filler = 0
+const think = ($: EngineInterface, on: boolean): void => {
+  if (quit === undefined) return // no engine running: nothing to tell
+  void locate($)
+    .then(path => $.process.run([path, 'thinking', on ? 'on' : 'off']))
+    .catch(() => undefined)
+}
 
 const progress = async ($: EngineInterface, text: string): Promise<void> => {
   const line = plain(text)
@@ -346,6 +351,7 @@ const engine = async ($: EngineInterface, polite = false): Promise<void> => {
         const e = JSON.parse(line) as { event: string; text?: string; file?: string; percent?: number; message?: string }
         if (e.event === 'speech') {
           talking = true
+          think($, false)
           hush() // they began to speak: stop talking, as one would
         } else if (e.event === 'quiet' || e.event === 'deaf') talking = false
         else if (e.event === 'heard' && e.text !== undefined) await heard($, e.text)
@@ -604,7 +610,7 @@ export const register: Register = on => {
       thinking = $.clock.after(THINK_MS, () => {
         const isQuiet = stop === undefined && !personHasTheFloor() && !paused
         if (running !== turnId || !speaking || !isQuiet) return
-        void say($, FILLERS[filler++ % FILLERS.length] ?? 'One moment.').catch(() => undefined)
+        think($, true)
       })
     }
 
@@ -631,10 +637,13 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId === undefined && running === e.turnId) {
+    const wasMain = e.agentId === undefined && running === e.turnId
+    if (wasMain) {
       running = undefined
       thinking?.cancel()
     }
+    // nothing will be said for this turn: the sound must not go on after it
+    if (wasMain && (!speaking || e.reason !== 'answer' || e.answer.trim() === '')) think($, false)
     const isMainAnswer = e.agentId === undefined && e.reason === 'answer'
     if (!isMainAnswer || e.answer.trim() === '') return done
     if (!speaking) return done
@@ -654,9 +663,11 @@ export const register: Register = on => {
       }
       if (personHasTheFloor() || mine !== latest) return
       await say($, text)
-    })().catch(error => {
-      $.ui.log(`handsfree: ${String(error)}`, { to: 'debug' })
-    })
+    })()
+      .catch(error => {
+        $.ui.log(`handsfree: ${String(error)}`, { to: 'debug' })
+      })
+      .finally(() => think($, false))
 
     return done
   })
