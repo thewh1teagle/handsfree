@@ -191,11 +191,16 @@ const RESUME = new RegExp(
 /** The words alone: lower case, no punctuation. */
 const bare = (text: string): string =>
   text.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+// While paused only this machine reads what is heard, so the way back is forgiving: a short
+// phrase with "hands free" in it, however recognition spelled it.
+const BACK = /\b(hands? ?free|hands ?three|handsfree)\b/
+const resumes = (words: string): boolean => RESUME.test(words) || (BACK.test(words) && words.split(' ').length <= 5)
 let paused = false
 
 // How a small model sorts what was just heard.
 const DONE = 'something to answer or act on now, even if short or casual'
 const UNFINISHED = 'breaks off in the middle of a sentence, or asks to wait a moment'
+const GO_AWAY = 'only tells the assistant to stop listening or pause, possibly misheard by speech recognition'
 
 // Speech heard so far that was not yet a whole thought, and the timer that sends it anyway.
 let held = ''
@@ -236,7 +241,7 @@ const heard = async ($: EngineInterface, text: string): Promise<void> => {
   talking = false
   const words = bare(text)
   if (paused) {
-    if (RESUME.test(words)) await pause($, false)
+    if (resumes(words)) await pause($, false)
 
     return // nothing else that was heard goes anywhere
   }
@@ -260,7 +265,14 @@ const heard = async ($: EngineInterface, text: string): Promise<void> => {
   const said = `${held} ${text}`.trim()
   // Only a thought plainly cut off by a pause, or "wait a second", is kept back and joined
   // to what comes next; with nothing more said within HOLD_MS it is sent as it stands.
-  const kind = await $.model.classify(said, [DONE, UNFINISHED]).catch(() => DONE)
+  // The same check catches a request to stop listening that recognition garbled
+  // ("claudes top this"): exact words cannot be relied on for that.
+  const kind = await $.model.classify(said, [DONE, UNFINISHED, GO_AWAY]).catch(() => DONE)
+  if (kind === GO_AWAY && said.split(' ').length <= 8) {
+    await pause($, true)
+
+    return
+  }
   if (kind === UNFINISHED) {
     held = said
     $.ui.status(`voice: waiting ${HOLD_MS / 1000}s for the rest of "${said.slice(-40)}"`)
