@@ -66,6 +66,61 @@ pub fn open(samples: Sender<Vec<f32>>) -> Result<Mic> {
     }
 }
 
+/// Linux, opt-in and untested by its authors: asks the audio server (PipeWire or PulseAudio)
+/// to load its echo-cancel module and routes this process's microphone and speaker through
+/// the virtual devices it creates. Any failure leaves the plain microphone in use.
+#[cfg(target_os = "linux")]
+pub struct EchoCancel(String);
+
+#[cfg(target_os = "linux")]
+impl EchoCancel {
+    const SOURCE: &'static str = "handsfree_mic";
+    const SINK: &'static str = "handsfree_speaker";
+
+    /// Call before any audio device is opened.
+    pub fn load() -> Option<EchoCancel> {
+        use std::process::Command;
+        // a module left behind by a run that was killed
+        if let Ok(listed) = Command::new("pactl").args(["list", "short", "modules"]).output() {
+            for line in String::from_utf8_lossy(&listed.stdout).lines().filter(|l| l.contains(Self::SOURCE)) {
+                if let Some(id) = line.split_whitespace().next() {
+                    let _ = Command::new("pactl").args(["unload-module", id]).status();
+                }
+            }
+        }
+        let loaded = Command::new("pactl")
+            .args([
+                "load-module",
+                "module-echo-cancel",
+                "aec_method=webrtc",
+                &format!("source_name={}", Self::SOURCE),
+                &format!("sink_name={}", Self::SINK),
+            ])
+            .output()
+            .ok()?;
+        if !loaded.status.success() {
+            return None;
+        }
+        // SAFETY: called at startup, before any other thread exists.
+        unsafe {
+            std::env::set_var("PULSE_SOURCE", Self::SOURCE);
+            std::env::set_var("PULSE_SINK", Self::SINK);
+        }
+        Some(EchoCancel(String::from_utf8_lossy(&loaded.stdout).trim().to_string()))
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for EchoCancel {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("pactl").args(["unload-module", &self.0]).status();
+    }
+}
+
+/// Set once the system's echo cancellation has been put in front of the plain microphone.
+#[cfg(not(target_os = "macos"))]
+pub static ECHO_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[cfg(not(target_os = "macos"))]
 pub fn open(samples: Sender<Vec<f32>>) -> Result<Mic> {
     use anyhow::Context;
@@ -84,5 +139,6 @@ pub fn open(samples: Sender<Vec<f32>>) -> Result<Mic> {
         None,
     )?;
     stream.play()?;
-    Ok(Mic { rate, echo_cancelled: false, _keep: Box::new(stream) })
+    let echo_cancelled = ECHO_CANCELLED.load(std::sync::atomic::Ordering::SeqCst);
+    Ok(Mic { rate, echo_cancelled, _keep: Box::new(stream) })
 }

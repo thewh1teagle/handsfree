@@ -179,12 +179,20 @@ fn main() -> Result<()> {
                 listen,
                 silence.or(config["silence"].as_f64().map(|v| v as f32)).unwrap_or(1.5),
                 !no_chimes && config["chimes"].as_bool() != Some(false),
+                config["echo_cancel"].as_bool() == Some(true),
             )
         }
     }
 }
 
-fn run(model: String, default_voice: Option<String>, listen: bool, silence: f32, chimes: bool) -> Result<()> {
+fn run(
+    model: String,
+    default_voice: Option<String>,
+    listen: bool,
+    silence: f32,
+    chimes: bool,
+    echo_cancel: bool,
+) -> Result<()> {
     // One at a time: a newer one takes over the microphone and the speaker from an older one.
     if ask(json!({ "quit": true }), Duration::ZERO).is_ok() {
         std::thread::sleep(Duration::from_millis(300));
@@ -192,6 +200,14 @@ fn run(model: String, default_voice: Option<String>, listen: bool, silence: f32,
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
     std::fs::create_dir_all(models::home())?;
     std::fs::write(port_file(), listener.local_addr()?.port().to_string())?;
+
+    // Linux, when asked for in config.json ("echo_cancel": true): the system's echo cancellation
+    #[cfg(target_os = "linux")]
+    let _echo_cancel = echo_cancel.then(mic::EchoCancel::load).flatten().inspect(|_| {
+        mic::ECHO_CANCELLED.store(true, Ordering::SeqCst);
+    });
+    #[cfg(not(target_os = "linux"))]
+    let _ = echo_cancel;
 
     let (speaker, _stream) = sound::Speaker::open()?;
     let (ready, loaded) = channel();

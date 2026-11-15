@@ -41,6 +41,8 @@ Inside the process:
 - **Microphone.** On macOS it goes through the system's voice processing, which removes
   whatever the computer is playing, the assistant's own voice included. That is what makes
   interrupting possible. Elsewhere it is a plain input, deaf while the assistant talks.
+  On Linux, `"echo_cancel": true` in `config.json` asks PipeWire or PulseAudio to load its
+  echo-cancel module instead. That path is experimental and has not been run by its authors.
 - **Voice detection** is Silero VAD. A pause of 1.5 s ends an utterance.
 - **Recognition** is Parakeet TDT 0.6B v2, run once per utterance.
 - **Speech** is Phonon, kept loaded, played as it is generated. The default voice is Harper.
