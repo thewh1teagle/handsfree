@@ -59,7 +59,7 @@ enum Command {
     Voices,
     /// Stop talking.
     Stop,
-    /// A soft repeating sound while an answer is on its way. It ends by itself when speech starts.
+    /// `on` plays one soft sound, for when an answer is taking a while; `off` cuts it short.
     Thinking {
         #[arg(value_parser = ["on", "off"])]
         state: String,
@@ -234,33 +234,15 @@ fn run(
         Err(_) => {}
     });
 
-    // the thinking sound: a pulse every 2.4 s while asked for, never under speech, a minute at most
-    let thinking = Arc::new(AtomicBool::new(false));
-    {
-        let (thinking, voice, speaker) = (thinking.clone(), voice.clone(), speaker.clone());
-        let pulse = sound::Chimes::new(0.16).thinking;
-        std::thread::spawn(move || {
-            let mut ticks = 0u32; // tenths of a second since it was turned on
-            loop {
-                std::thread::sleep(Duration::from_millis(100));
-                if !thinking.load(Ordering::SeqCst) || voice.speaking.load(Ordering::SeqCst) || ticks > 600 {
-                    thinking.store(false, Ordering::SeqCst);
-                    ticks = 0;
-                    continue;
-                }
-                if ticks % 24 == 0 {
-                    speaker.chime(&pulse, sound::CHIME_RATE);
-                }
-                ticks += 1;
-            }
-        });
-    }
+    // the thinking sound: played once when asked for, never under speech
+    let murmur = Arc::new(sound::Chimes::new(0.16).thinking);
 
     for connection in listener.incoming() {
         let Ok(connection) = connection else { continue };
-        let (voice, listening, paused, thinking) = (voice.clone(), listening.clone(), paused.clone(), thinking.clone());
+        let (voice, listening, paused) = (voice.clone(), listening.clone(), paused.clone());
+        let (speaker, murmur) = (speaker.clone(), murmur.clone());
         std::thread::spawn(move || {
-            let _ = serve(connection, voice, listening, paused, thinking);
+            let _ = serve(connection, voice, listening, paused, speaker, murmur);
         });
     }
     Ok(())
@@ -271,7 +253,8 @@ fn serve(
     voice: voice::Voice,
     listening: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
-    thinking: Arc<AtomicBool>,
+    speaker: sound::Speaker,
+    murmur: Arc<Vec<f32>>,
 ) -> Result<()> {
     let mut line = String::new();
     BufReader::new(connection.try_clone()?).read_line(&mut line)?;
@@ -287,12 +270,14 @@ fn serve(
     } else if let Some(on) = request["paused"].as_bool() {
         paused.store(on, Ordering::SeqCst);
     } else if let Some(on) = request["thinking"].as_bool() {
-        thinking.store(on, Ordering::SeqCst);
+        if on && !voice.speaking.load(Ordering::SeqCst) {
+            speaker.chime(&murmur, sound::CHIME_RATE);
+        } else if !on {
+            speaker.chime(&[], sound::CHIME_RATE); // cut it short
+        }
     } else if request["stop"].as_bool() == Some(true) {
-        thinking.store(false, Ordering::SeqCst);
         voice.hush();
     } else if let Some(text) = request["say"].as_str() {
-        thinking.store(false, Ordering::SeqCst);
         let (done, finished) = channel();
         let wanted = Arc::new(AtomicBool::new(true));
         voice.say(voice::Request {

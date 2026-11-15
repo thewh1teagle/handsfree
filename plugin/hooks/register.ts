@@ -169,9 +169,8 @@ const plain = (text: string): string => {
   return out.trim().slice(0, 240)
 }
 
-// When an answer is taking a while and nothing has been said yet, a soft repeating sound, so
-// the wait is not silence. It starts THINK_MS into a turn and the engine ends it when speech
-// starts; it is turned off here when the turn ends with nothing to say, or the person speaks.
+// When an answer is taking a while and nothing has been said yet, one soft sound, so the
+// wait is not plain silence. Once per turn, THINK_MS in.
 const THINK_MS = 4000
 let thinking: { cancel: () => void } | undefined
 const think = ($: EngineInterface, on: boolean): void => {

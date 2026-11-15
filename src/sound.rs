@@ -91,7 +91,7 @@ fn resample(samples: &[f32], from: u32, to: u32) -> Vec<f32> {
 pub struct Chimes {
     pub start: Vec<f32>,
     pub end: Vec<f32>,
-    /// A soft double pulse, repeated while an answer is being thought about.
+    /// Played once when an answer is taking a while: two soft notes, much quieter than the chimes.
     pub thinking: Vec<f32>,
 }
 
@@ -100,8 +100,7 @@ pub const CHIME_RATE: u32 = 48_000;
 impl Chimes {
     pub fn new(volume: f32) -> Chimes {
         let (low, high) = (587.33, 880.0); // D5 and A5, a fifth apart
-        // lower and much quieter than the chimes: it is there to be half-noticed
-        let thinking = pair(329.63, 392.0, volume * 0.4); // E4 and G4
+        let thinking = murmur(329.63, 392.0, volume * 0.22); // E4 and G4, barely there
         Chimes { start: pair(low, high, volume), end: pair(high, low, volume), thinking }
     }
 }
@@ -134,6 +133,30 @@ fn pair(first: f32, second: f32, volume: f32) -> Vec<f32> {
     let len = out.len();
     for i in 0..fade {
         out[len - fade + i] *= 1.0 - i as f32 / fade as f32;
+    }
+    let peak = out.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+    out.iter().map(|s| s / peak * volume).collect()
+}
+
+/// Two pure notes with a slow attack and a long fade: no bell, no edge.
+fn murmur(first: f32, second: f32, volume: f32) -> Vec<f32> {
+    let tau = std::f32::consts::TAU;
+    let tone = |freq: f32| -> Vec<f32> {
+        (0..(CHIME_RATE as f32 * 0.7) as usize)
+            .map(|i| {
+                let t = i as f32 / CHIME_RATE as f32;
+                (tau * freq * t).sin() * (t / 0.05).min(1.0) * (-t / 0.2).exp()
+            })
+            .collect()
+    };
+    let gap = (CHIME_RATE as f32 * 0.16) as usize;
+    let (a, b) = (tone(first), tone(second));
+    let mut out = vec![0.0; gap + b.len()];
+    for (i, s) in a.iter().enumerate() {
+        out[i] += s;
+    }
+    for (i, s) in b.iter().enumerate() {
+        out[gap + i] += s;
     }
     let peak = out.iter().fold(0.0f32, |m, s| m.max(s.abs()));
     out.iter().map(|s| s / peak * volume).collect()
