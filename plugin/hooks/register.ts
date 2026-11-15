@@ -310,6 +310,78 @@ const WELCOME =
 const HELP =
   '/handsfree on or off · mute (microphone off) · quiet (speech off) · voices · voice <name> · always on|off · uninstall'
 
+/** What `/handsfree <args>` does; throws with the reason when it cannot. */
+const command = async ($: EngineInterface, args: string): Promise<{ text: string; isTextDisplayOnly: true }> => {
+  const [word = '', ...rest] = args.trim().split(/\s+/)
+  const arg = word.toLowerCase()
+  const say1 = (text: string) => ({ text, isTextDisplayOnly: true as const })
+  const isOn = speaking || listening
+
+  if (arg === '' || arg === 'on' || arg === 'off') {
+    const turnOn = arg === 'on' || (arg === '' && !isOn)
+    await set($, turnOn, turnOn)
+    if (turnOn && (await $.store.get('welcomed')) !== true) {
+      await $.store.set('welcomed', true)
+      void say($, WELCOME).catch(() => undefined)
+    }
+
+    return say1(
+      turnOn
+        ? 'Voice on. Speak, pause, and it is sent. Talk over me to interrupt; say "stop" to cut me off.'
+        : 'Voice off.',
+    )
+  }
+  if (arg === 'mute') {
+    await set($, true, false)
+
+    return say1('Microphone off. I still answer aloud. /handsfree on turns it back on.')
+  }
+  if (arg === 'quiet') {
+    await set($, false, true)
+
+    return say1('Spoken answers off. I am still listening. /handsfree on turns them back on.')
+  }
+  if (arg === 'always') {
+    const always = rest[0]?.toLowerCase() !== 'off'
+    await $.store.set('always', always)
+
+    return say1(always ? 'Voice will start on in every new session.' : 'Voice will start off in new sessions.')
+  }
+  if (arg === 'voices') {
+    const listed = await $.process.run([await locate($), 'voices'], { timeoutMs: 60_000 })
+    const current = await $.store.get('voice')
+    const now = typeof current === 'string' && current !== '' ? current : 'the default'
+
+    return say1(
+      listed.exitCode === 0
+        ? `Voices (now: ${now}). Pick one with /handsfree voice <name>.\n\n${listed.stdout.trim()}`
+        : `Could not list the voices: ${listed.stderr.trim().slice(-200)}`,
+    )
+  }
+  if (arg === 'voice') {
+    const name = rest.join(' ')
+    const isDefault = name === '' || name.toLowerCase() === 'default'
+    await $.store.set('voice', isDefault ? '' : name)
+    if (speaking) void say($, isDefault ? 'This is the default voice.' : `This is ${name}.`).catch(() => undefined)
+
+    return say1(isDefault ? 'Voice reset to the default.' : `Voice: ${name}.`)
+  }
+
+  if (arg === 'uninstall') {
+    await set($, false, false)
+    // the binary removes its own folder (itself, the models, the settings) and the voices
+    const gone = await $.process.run([await locate($), 'uninstall'], { timeoutMs: 60_000 })
+    binary = undefined
+    for (const key of ['always', 'voice', 'welcomed', 'hinted']) await $.store.delete(key)
+
+    return say1(
+      `${gone.stdout.trim() || gone.stderr.trim()}\n\nThe downloads are gone. To remove the plugin itself: /plugin uninstall handsfree`,
+    )
+  }
+
+  return say1(HELP)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -330,74 +402,18 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'handsfree' }, async ($, e) => {
-    const [word = '', ...rest] = e.args.trim().split(/\s+/)
-    const arg = word.toLowerCase()
-    const say1 = (text: string) => ({ text, isTextDisplayOnly: true as const })
-    const isOn = speaking || listening
+    try {
+      return await command($, e.args)
+    } catch (error) {
+      // say why, not just that it failed: a download that did not work is the usual reason
+      speaking = false
+      listening = false
 
-    if (arg === '' || arg === 'on' || arg === 'off') {
-      const turnOn = arg === 'on' || (arg === '' && !isOn)
-      await set($, turnOn, turnOn)
-      if (turnOn && (await $.store.get('welcomed')) !== true) {
-        await $.store.set('welcomed', true)
-        void say($, WELCOME).catch(() => undefined)
+      return {
+        text: `Could not do that: ${error instanceof Error ? error.message : String(error)}`,
+        isTextDisplayOnly: true as const,
       }
-
-      return say1(
-        turnOn
-          ? 'Voice on. Speak, pause, and it is sent. Talk over me to interrupt; say "stop" to cut me off.'
-          : 'Voice off.',
-      )
     }
-    if (arg === 'mute') {
-      await set($, true, false)
-
-      return say1('Microphone off. I still answer aloud. /handsfree on turns it back on.')
-    }
-    if (arg === 'quiet') {
-      await set($, false, true)
-
-      return say1('Spoken answers off. I am still listening. /handsfree on turns them back on.')
-    }
-    if (arg === 'always') {
-      const always = rest[0]?.toLowerCase() !== 'off'
-      await $.store.set('always', always)
-
-      return say1(always ? 'Voice will start on in every new session.' : 'Voice will start off in new sessions.')
-    }
-    if (arg === 'voices') {
-      const listed = await $.process.run([await locate($), 'voices'], { timeoutMs: 60_000 })
-      const current = await $.store.get('voice')
-      const now = typeof current === 'string' && current !== '' ? current : 'the default'
-
-      return say1(
-        listed.exitCode === 0
-          ? `Voices (now: ${now}). Pick one with /handsfree voice <name>.\n\n${listed.stdout.trim()}`
-          : `Could not list the voices: ${listed.stderr.trim().slice(-200)}`,
-      )
-    }
-    if (arg === 'voice') {
-      const name = rest.join(' ')
-      const isDefault = name === '' || name.toLowerCase() === 'default'
-      await $.store.set('voice', isDefault ? '' : name)
-      if (speaking) void say($, isDefault ? 'This is the default voice.' : `This is ${name}.`).catch(() => undefined)
-
-      return say1(isDefault ? 'Voice reset to the default.' : `Voice: ${name}.`)
-    }
-
-    if (arg === 'uninstall') {
-      await set($, false, false)
-      // the binary removes its own folder (itself, the models, the settings) and the voices
-      const gone = await $.process.run([await locate($), 'uninstall'], { timeoutMs: 60_000 })
-      binary = undefined
-      for (const key of ['always', 'voice', 'welcomed', 'hinted']) await $.store.delete(key)
-
-      return say1(
-        `${gone.stdout.trim() || gone.stderr.trim()}\n\nThe downloads are gone. To remove the plugin itself: /plugin uninstall handsfree`,
-      )
-    }
-
-    return say1(HELP)
   }).catch(() => ({ text: `The command failed. ${HELP}`, isTextDisplayOnly: true as const }))
 
   // A new prompt cuts off whatever is still being said.
