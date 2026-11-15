@@ -62,7 +62,17 @@ No key to hold and no screen to watch. A soft chime tells you when it starts and
 | `/handsfree always on` | start every new session with voice on |
 | `/handsfree uninstall` | delete everything it downloaded |
 
-Voice is off until you ask for it, and lives in one session at a time.
+Voice is off until you ask for it.
+
+<br>
+
+## More than one session
+
+There is one microphone, so voice lives in one session at a time.
+
+- **To move it,** type `/handsfree` in the session you want to talk to. The other one goes quiet and says so.
+- **Sessions never take it by themselves.** With `always on`, a new session starts with voice only if no other session is using it.
+- **Close the session that has it** and the next one you open picks it up.
 
 <br>
 
