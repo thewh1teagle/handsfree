@@ -1,14 +1,21 @@
 <div align="center">
 
-<img src="assets/logo.svg" width="140" alt="">
+<img src="assets/logo.svg" width="160" alt="">
 
 # Hands Free
 
-Talk to Claude Code. It talks back. Interrupt it any time.
+### Talk to Claude Code. It talks back.
+
+Speak your prompt, hear the answer, interrupt whenever you like.<br>
+Everything about your voice stays on your machine.
 
 </div>
 
 <br>
+
+## Install
+
+In Claude Code, paste:
 
 ```
 /plugin install handsfree --marketplace thewh1teagle/handsfree
@@ -18,19 +25,36 @@ Then type `/handsfree` and start talking.
 
 <br>
 
-| Speak | Listen | Interrupt | Private |
-|:---:|:---:|:---:|:---:|
-| Pause and it's sent.<br>No key to hold. | A short spoken answer,<br>in under a second. | Talk over it,<br>or say "stop". | Speech runs<br>on your machine. |
+## What it's like
+
+```
+You      refactor the auth module and run the tests
+Claude   Starting on the auth module.
+Claude   Two files changed. Running the tests now.
+You      wait, keep the old function names
+Claude   Got it. Keeping the names and rerunning.
+```
+
+No key to hold and no screen to watch. A soft chime tells you when it starts and stops listening.
 
 <br>
 
-<details>
-<summary>More commands</summary>
-
-<br>
+## Why it feels different
 
 | | |
-|---|---|
+|:--|:--|
+| **Hands-free, really** | Pause and your words are sent. Half-finished thoughts wait for you. |
+| **Fast** | A short spoken answer, under a second after the text appears. |
+| **Interruptible** | Talk over it and it stops. Mid-task, your words change its course. Say "stop" and it stops. |
+| **Keeps you posted** | On long tasks it tells you what it's doing as it goes. |
+| **Local** | Recognition and speech run on your machine. It never hears its own voice. |
+
+<br>
+
+## Commands
+
+| | |
+|:--|:--|
 | `/handsfree` | voice on or off, for this session |
 | `/handsfree mute` | microphone off, answers still spoken |
 | `/handsfree quiet` | answers silent, still listening |
@@ -38,17 +62,24 @@ Then type `/handsfree` and start talking.
 | `/handsfree always on` | start every new session with voice on |
 | `/handsfree uninstall` | delete everything it downloaded |
 
-</details>
+Voice is off until you ask for it, and lives in one session at a time.
 
 <br>
 
+## Requirements
+
+macOS on Apple silicon, and Claude Code. The first run downloads about 700 MB of models.
+
+<br>
+
+---
+
 <div align="center">
 
-<sub>Early release · macOS on Apple silicon · <a href="docs/architecture.md">How it works</a> · <a href="docs/development.md">Build from source</a> · MIT</sub>
+<a href="docs/architecture.md">How it works</a> &nbsp;·&nbsp; <a href="docs/development.md">Build from source</a> &nbsp;·&nbsp; MIT
 
-<br><br>
+<br>
 
-Built with Hands Free, literally.<br>
-<sub>No keyboards were harmed in the making of this plugin.</sub>
+<sub>Built with Hands Free, literally.</sub>
 
 </div>
