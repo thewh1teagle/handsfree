@@ -42,7 +42,7 @@ Inside the process:
   interrupting possible. Elsewhere it is a plain input, deaf while the assistant talks.
 - **Voice detection** is Silero VAD. A pause of 1.5 s ends an utterance.
 - **Recognition** is Parakeet TDT 0.6B v2, run once per utterance.
-- **Speech** is Phonon, kept loaded, played as it is generated.
+- **Speech** is Phonon, kept loaded, played as it is generated. The default voice is Harper.
 - **Chimes** are synthesized: two notes rising when it starts to listen, falling when it stops.
 
 Models are downloaded on first use into `~/.cache/handsfree`. Settings can be put in

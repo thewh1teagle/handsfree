@@ -65,6 +65,10 @@ enum Command {
     },
 }
 
+/// The voice used when none is chosen: from the Phonon catalog, fetched on first use. If it
+/// cannot be fetched, the model's own voice is used.
+const DEFAULT_VOICE: &str = "Harper";
+
 /// How long a client waits for a process that was only just started.
 const WAIT: Duration = Duration::from_secs(5);
 
@@ -159,7 +163,7 @@ fn main() -> Result<()> {
             let text = |key: &str| config[key].as_str().map(str::to_string);
             run(
                 model.or(text("model")).unwrap_or_else(|| ptts::checkpoint::DEFAULT_MODEL.to_string()),
-                voice.or(text("voice")),
+                Some(voice.or(text("voice")).unwrap_or_else(|| DEFAULT_VOICE.to_string())),
                 listen,
                 silence.or(config["silence"].as_f64().map(|v| v as f32)).unwrap_or(1.5),
                 !no_chimes && config["chimes"].as_bool() != Some(false),
