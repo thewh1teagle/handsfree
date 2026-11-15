@@ -22,6 +22,8 @@ use crate::{event, mic, models};
 
 const RATE: i32 = 16_000;
 const BLOCK: usize = 512; // one Silero window, 32 ms
+/// Seconds of our own speech the echo canceller must have heard before it is trusted.
+const ADAPT_SECONDS: f32 = 6.0;
 
 pub struct Ears {
     pub on: Arc<AtomicBool>,
@@ -83,6 +85,7 @@ impl Ears {
             let mut preroll: VecDeque<Vec<f32>> = VecDeque::new(); // audio just before the voice
             let mut utterance: Option<Vec<f32>> = None;
             let (mut heard, mut chimed) = (0usize, false);
+            let (mut adapted, mut settle) = (0.0f32, 0u32); // seconds of our speech heard; chunks to wait
 
             while self.on.load(Ordering::SeqCst) {
                 let chunk = match incoming.recv_timeout(Duration::from_millis(100)) {
@@ -90,8 +93,19 @@ impl Ears {
                     Err(RecvTimeoutError::Timeout) => continue,
                     Err(RecvTimeoutError::Disconnected) => break,
                 };
-                // without echo cancellation we would hear ourselves: stay deaf while talking
-                if !microphone.echo_cancelled && voice.speaking.load(Ordering::SeqCst) {
+                // Without echo cancellation we would hear ourselves: stay deaf while talking. The
+                // same goes for a canceller that has only just started: it needs to hear a few
+                // seconds of our speech before it removes it cleanly, and until then our own
+                // words come back as if someone had said them.
+                let talking = voice.speaking.load(Ordering::SeqCst);
+                if talking {
+                    adapted += chunk.len() as f32 / microphone.rate as f32;
+                    settle = 12; // and a moment after we stop, for the tail
+                } else if settle > 0 {
+                    settle -= 1;
+                }
+                let settled = microphone.echo_cancelled && adapted > ADAPT_SECONDS;
+                if !settled && (talking || settle > 0) {
                     pending.clear();
                     preroll.clear();
                     utterance = None;
