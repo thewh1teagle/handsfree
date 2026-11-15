@@ -109,9 +109,28 @@ const hush = (): void => {
   stop = undefined
 }
 
+// What was last said aloud and when it ended (0 while it is still being said): if the
+// microphone hands those same words back, it heard us, not the person.
+let said = ''
+let saidUntil = 0
+const ECHO_MS = 6000
+const wordsOf = (text: string): string =>
+  text.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** True when `heard` is a run of two or more words straight out of what we just said. */
+const isOwnVoice = async ($: EngineInterface, heard: string): Promise<boolean> => {
+  const words = wordsOf(heard)
+  if (said === '' || words.split(' ').length < 2) return false
+  if (saidUntil !== 0 && (await $.clock.now()) - saidUntil > ECHO_MS) return false
+
+  return ` ${said} `.includes(` ${words} `)
+}
+
 /** Says `text` and resolves when it has been said or cut off. */
 const say = async ($: EngineInterface, text: string): Promise<void> => {
   await engine($)
+  said = wordsOf(text)
+  saidUntil = 0
   const voice = await $.store.get('voice')
   const argv = [await locate($), 'say', ...(typeof voice === 'string' && voice !== '' ? ['--voice', voice] : [])]
   const child = $.process.spawn({ argv, input: text })
@@ -123,6 +142,7 @@ const say = async ($: EngineInterface, text: string): Promise<void> => {
     for await (const piece of child) void piece
   } finally {
     if (stop === stopMine) stop = undefined
+    saidUntil = await $.clock.now().catch(() => 0)
   }
 }
 
@@ -252,6 +272,8 @@ const pause = async ($: EngineInterface, on: boolean): Promise<void> => {
 
 const heard = async ($: EngineInterface, text: string): Promise<void> => {
   talking = false
+  // echo cancellation let our own words through: they are not a prompt
+  if (await isOwnVoice($, text)) return
   const words = bare(text)
   if (paused) {
     if (resumes(words)) await pause($, false)
